@@ -1,0 +1,1 @@
+export const ScrollArea = React.forwardRef<HTMLDivElement, any>((props, ref) => <div ref={ref} className='overflow-y-auto' {...props} />);

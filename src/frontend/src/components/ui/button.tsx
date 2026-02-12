@@ -1,0 +1,1 @@
+export const Button = (props: any) => <button {...props} className='border border-green-500 px-2 py-1 hover:bg-green-500 hover:text-black transition'>{props.children}</button>;

@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent mobile browser chrome from affecting viewport height */
+html, body {
+  @apply bg-black text-green-500 font-mono;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Fix mobile viewport height issues */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari */
+  html, body, #root {
+    height: -webkit-fill-available;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}

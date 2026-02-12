@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+    "OSINT": {
+      "command": "${VENV_PYTHON}",
+      "args": [
+        "${PROJECT_ROOT}/mcp_servers/servers/osint/osint.py",
+        "--transport",
+        "stdio"
+      ],
+      "transport": "stdio",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "AUTO_OPEN_BROWSER": "true"
+      }
+    },
+    "nmap": {
+      "command": "${VENV_PYTHON}",
+      "args": [
+        "${PROJECT_ROOT}/mcp_servers/servers/nmap/nmap_mcp.py",
+        "--transport",
+        "stdio"
+      ],
+      "transport": "stdio"
+    },
+    "metasploit": {
+      "command": "${VENV_PYTHON}",
+      "args": [
+        "${PROJECT_ROOT}/mcp_servers/servers/metasploit/metasploit.py",
+        "--transport",
+        "stdio"
+      ],
+      "transport": "stdio",
+      "env": {
+        "MSF_PASSWORD": "123456",
+        "MSF_HOST": "127.0.0.1",
+        "MSF_PORT": "55553"
+      }
+    },
+    "network-tools": {
+      "command": "${VENV_PYTHON}",
+      "args": [
+        "${PROJECT_ROOT}/mcp_servers/servers/network/Network.py",
+        "--transport",
+        "stdio"
+      ],
+      "transport": "stdio",
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

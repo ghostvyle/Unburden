@@ -1,0 +1,1 @@
+export const Textarea = (props: any) => <textarea {...props} className='bg-black border border-green-500 text-green-500 w-full p-2' />;

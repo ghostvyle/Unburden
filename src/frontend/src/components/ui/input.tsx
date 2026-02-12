@@ -1,0 +1,1 @@
+export const Input = (props: any) => <input {...props} className='bg-black border border-green-500 text-green-500 px-2 py-1 w-full' />;

@@ -62,6 +62,7 @@ const App = () => {
   const [sessionId, setSessionId] = useState<string>("");
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [editMode, setEditMode] = useState<'none' | 'report' | 'history'>('none');
   const [showReportButtons, setShowReportButtons] = useState(false);
   const [showMcpModal, setShowMcpModal] = useState(false);
@@ -816,8 +817,29 @@ Puede descargar los archivos generados durante esta sesión:
   const isHeaderDisabled = loading || editMode !== 'none' || isProcessing;
 
   return (
-    <div className="h-full max-h-full flex bg-black overflow-hidden">
-      {/* Sidebar de chats */}
+    <div className="h-dvh max-h-dvh flex bg-black overflow-hidden">
+      {/* Mobile sidebar — overlay drawer */}
+      {showSidebar && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowSidebar(false)} />
+          <div className="absolute left-0 top-0 h-full w-72 shadow-2xl z-10">
+            <ChatSidebar
+              currentChatId={currentChatId}
+              onSelectChat={(id) => { handleSelectChat(id); setShowSidebar(false); }}
+              onNewChat={handleNewChat}
+              onDeleteChat={handleDeleteChat}
+              onRenameChat={handleRenameChat}
+              onUpdateTarget={updateTarget}
+              onDeleteAllChats={handleDeleteAllChats}
+              chats={chats}
+              targets={targets}
+              apiBaseUrl={API_BASE_URL}
+              disabled={loading || isProcessing || editMode !== 'none'}
+            />
+          </div>
+        </div>
+      )}
+      {/* Desktop sidebar — inline */}
       {showSidebar && (
         <div className="w-80 h-full flex-shrink-0 hidden md:block">
           <ChatSidebar
@@ -840,21 +862,21 @@ Puede descargar los archivos generados durante esta sesión:
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="border-b border-green-400/40 bg-black/95 backdrop-blur-sm shadow-2xl shadow-green-500/10 flex-shrink-0">
           <div className="w-full px-2 sm:px-3 lg:px-4 py-2">
-            {/* Top row - Title and sidebar toggle */}
+            {/* Top row - Title, sidebar toggle, mobile menu toggle */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {/* Botón toggle sidebar */}
+                {/* Botón toggle sidebar — visible en todas las pantallas */}
                 <button
                   onClick={() => setShowSidebar(!showSidebar)}
-                  className="hidden md:block px-2 py-1 border border-green-400/70 bg-green-400/10 text-green-400 hover:bg-green-400/20 font-mono text-xs transition-all"
+                  className="px-2 py-1 border border-green-400/70 bg-green-400/10 text-green-400 hover:bg-green-400/20 font-mono text-xs transition-all rounded"
                   title={showSidebar ? "Ocultar chats" : "Mostrar chats"}
                 >
-                  [{showSidebar ? "◀" : "▶"}]
+                  {showSidebar ? "[◀]" : "[▶]"}
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <h1 className="text-sm sm:text-base lg:text-lg font-mono font-bold text-green-400 whitespace-nowrap">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse flex-shrink-0"></div>
+                  <h1 className="font-mono font-bold text-green-400 whitespace-nowrap text-[10px] sm:text-xs md:text-base lg:text-lg">
                     [Unburden@pentestingAssistant:~]$
                   </h1>
                 </div>
@@ -864,10 +886,19 @@ Puede descargar los archivos generados durante esta sesión:
                   <span>[ACTIVE]</span>
                 </div>
               </div>
+
+              {/* Mobile: botón para desplegar herramientas */}
+              <button
+                className="md:hidden px-3 py-1.5 border border-gray-600/70 bg-gray-800/50 text-gray-300 hover:bg-gray-700 font-mono text-xs rounded transition-all"
+                onClick={() => setShowMobileMenu(v => !v)}
+                title="Herramientas"
+              >
+                {showMobileMenu ? "[✕]" : "[☰]"}
+              </button>
             </div>
 
-            {/* Control buttons - Responsive con flex wrap */}
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-mono">
+            {/* Control buttons — siempre visible en desktop, colapsable en móvil */}
+            <div className={`${showMobileMenu ? 'flex' : 'hidden'} md:flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-mono`}>
               {/* Pentest Mode */}
               <div className="flex items-center gap-2 border border-gray-600/50 bg-gray-900/30 rounded-md px-3 py-2 min-w-fit shadow-lg shadow-gray-900/50">
                 <span className="text-xs sm:text-sm text-green-400 whitespace-nowrap font-semibold">PENTEST:</span>
@@ -942,9 +973,9 @@ Puede descargar los archivos generados durante esta sesión:
               />
             </div>
 
-            {/* Tools row - Mobile Optimized */}
-            {pentestingMode && showReportButtons && (
-              <div className="space-y-3 mt-3">
+            {/* Tools row - colapsable en móvil junto con el resto del menú */}
+            {pentestingMode && showReportButtons && (showMobileMenu || true) && (
+              <div className={`${showMobileMenu ? '' : 'hidden'} md:block space-y-3 mt-3`}>
                 {/* Mobile: Show all buttons in stacked groups */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Report Generation Group */}
@@ -1618,10 +1649,11 @@ Puede descargar los archivos generados durante esta sesión:
                   </div>
                 </div>
 
-                <div className="relative">
+                {/* Input row: textarea + send button en flex para evitar solapamiento */}
+                <div className="flex items-end gap-2 p-2">
                   <textarea
                     ref={textareaRef}
-                    className="w-full bg-black/90 text-green-300 p-2 pr-14 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-green-400/50 transition-all placeholder-green-600/50 leading-tight min-h-[50px] max-h-[200px]"
+                    className="flex-1 min-w-0 bg-black/90 text-green-300 p-2 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-green-400/50 transition-all placeholder-green-600/50 leading-tight min-h-[50px] max-h-[200px]"
                     rows={1}
                     placeholder="# Enter cybersecurity query here..."
                     value={input}
@@ -1629,11 +1661,10 @@ Puede descargar los archivos generados durante esta sesión:
                     onKeyDown={handleKeyDown}
                     disabled={isHeaderDisabled}
                   />
-
                   <button
                     onClick={() => sendMessage()}
                     disabled={isHeaderDisabled || !input.trim()}
-                    className={`absolute top-1/2 transform -translate-y-1/2 right-2 px-2 py-1 border font-mono text-xs min-h-[30px] transition-all touch-manipulation ${loading
+                    className={`flex-shrink-0 px-3 py-2 border font-mono text-xs min-h-[42px] min-w-[56px] transition-all touch-manipulation self-end rounded ${loading
                       ? "border-orange-400/70 bg-orange-400/10 text-orange-400 cursor-not-allowed animate-pulse"
                       : (isHeaderDisabled || !input.trim())
                         ? "border-gray-600 bg-gray-900/50 text-gray-500 cursor-not-allowed"

@@ -67,8 +67,10 @@ def _build_llm(profile: dict) -> Ollama:
     temperature = profile.get("temperature", 0.1)
     num_predict = profile.get("num_predict", 32768)
 
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     instance = Ollama(
         model=model,
+        base_url=ollama_host,
         request_timeout=999999,
         thinking=thinking,
         temperature=temperature,

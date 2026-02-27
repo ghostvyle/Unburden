@@ -127,6 +127,32 @@ async def _async_ollama_pull(model: str, timeout: int = 600) -> tuple[bool, str]
         return False, str(e)
 
 
+async def _test_model_loads(model: str, num_ctx: int = 4096, timeout: int = 30) -> tuple[bool, str]:
+    """
+    Prueba que Ollama puede cargar el modelo sin OOM.
+    Envía un prompt mínimo con keep_alive corto para verificar.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
+            resp = await client.post(
+                f"{_OLLAMA_BASE}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": "hi",
+                    "options": {"num_ctx": num_ctx, "num_predict": 1},
+                    "stream": False,
+                },
+            )
+            if resp.status_code != 200:
+                body = resp.text[:300]
+                return False, f"HTTP {resp.status_code}: {body}"
+            return True, ""
+    except httpx.TimeoutException:
+        return False, f"Timeout loading model (>{timeout}s)"
+    except Exception as e:
+        return False, str(e)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/status")
@@ -230,10 +256,24 @@ async def switch_model(request: SwitchModelRequest) -> JSONResponse:
             raise HTTPException(500, detail=f"Error descargando modelo: {err}")
         logger.info(f"Pull completado: {target_model}")
 
-    # 5. Actualizar configuración
+    # 5. Test: verificar que el modelo carga sin OOM antes de cambiar
+    num_ctx = profile.get("num_ctx", 4096)
+    logger.info(f"Testing model '{target_model}' loads correctly (num_ctx={num_ctx})...")
+    loads_ok, load_err = await _test_model_loads(target_model, num_ctx=num_ctx)
+    if not loads_ok:
+        # Restaurar modelo anterior si el test falla
+        if current_model and current_model != target_model:
+            await _stop_ollama_model(target_model)
+        logger.error(f"Model '{target_model}' failed to load: {load_err}")
+        raise HTTPException(400, detail=(
+            f"El modelo '{profile.get('name')}' no se pudo cargar: {load_err}. "
+            "Puede que no haya suficiente memoria (RAM/VRAM)."
+        ))
+
+    # 6. Actualizar configuración
     _save_active_model(request.profile_id, target_model)
 
-    # 6. Recargar LLM + agente
+    # 7. Recargar LLM + agente
     try:
         from src.backend.mcp.llm import reload_llm
         from src.backend.agent.agent_manager import initialize_agent

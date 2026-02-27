@@ -6,5 +6,6 @@
     "size_gb": 9.0,
     "thinking": true,
     "temperature": 0.1,
-    "num_predict": 32768
+    "num_predict": 32768,
+    "num_ctx": 32768
 }

@@ -17,6 +17,7 @@ import os
 from src.backend.config.config import CORS_ORIGINS, logger
 from src.backend.agent.agent_manager import initialize_agent
 from src.backend.mcp.mcp_client import get_mcp_manager
+from src.backend.mcp.llm import validate_and_fix_active_model
 
 # Import routes
 from src.backend.routes.chat import router as chat_router
@@ -39,6 +40,11 @@ async def lifespan(app: FastAPI):
     #Create directory for data if not exists
     os.makedirs('data', exist_ok=True)
 
+
+    # Validar que el modelo activo existe en Ollama (fallback si no)
+    fallback = await validate_and_fix_active_model()
+    if fallback:
+        logger.warning(f"Active model was not available. Switched to: {fallback}")
 
     # Inicializar agente
     await initialize_agent()

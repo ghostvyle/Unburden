@@ -760,6 +760,79 @@ async def delete_chat(chat_id: str) -> JSONResponse:
         raise HTTPException(status_code=500, detail=f"Error deleting chat: {str(e)}")
 
 
+@router.delete("/chats")
+async def delete_all_chats() -> JSONResponse:
+    """
+    Elimina TODOS los chats y sus informes/historiales asociados.
+    Borra directamente todos los .md de data/chats/ y resetea el índice
+    para evitar entradas fantasma en el índice que impidan el borrado.
+
+    Returns:
+        JSONResponse con el número de chats eliminados.
+    """
+    import shutil
+    from pathlib import Path
+
+    try:
+        from src.backend.agent.agent_manager import (
+            get_pentesting_reports,
+            get_chat_histories,
+            clear_agent_context,
+        )
+
+        chats_raw = chat_manager.get_chat_index()
+        deleted_count = len(chats_raw)
+
+        # 1. Borrar archivos de pentest (informes + historiales en memoria)
+        try:
+            pentesting_reports = get_pentesting_reports()
+            chat_histories = get_chat_histories()
+            for chat in chats_raw:
+                chat_id = chat.get("id", "")
+                try:
+                    if chat_id in pentesting_reports:
+                        p_file = pentesting_reports.pop(chat_id)
+                        if os.path.exists(p_file):
+                            os.remove(p_file)
+                    if chat_id in chat_histories:
+                        h_file = chat_histories.pop(chat_id)
+                        if os.path.exists(h_file):
+                            os.remove(h_file)
+                except Exception as e:
+                    logger.warning(f"Error limpiando pentest data {chat_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Error limpiando datos de pentest: {e}")
+
+        # 2. Borrar todos los .md de chats Y de reports directamente en disco
+        for target_dir in [Path(chat_manager.CHATS_DIR), Path("data/reports")]:
+            if target_dir.exists():
+                for md_file in target_dir.glob("*.md"):
+                    try:
+                        md_file.unlink()
+                    except Exception as e:
+                        logger.warning(f"Error borrando {md_file}: {e}")
+
+        # 3. Resetear el índice a lista vacía (evita entradas fantasma)
+        chat_manager._save_chat_index([])
+        chat_manager._cache_dirty = True
+
+        # 4. Limpiar contexto del agente
+        try:
+            clear_agent_context()
+        except Exception:
+            pass
+
+        logger.info(f"Delete-all: eliminados {deleted_count} chats + índice reseteado")
+        return JSONResponse({
+            "success": True,
+            "deleted": deleted_count,
+            "message": f"{deleted_count} chat(s) e informes eliminados correctamente."
+        })
+    except Exception as e:
+        logger.error(f"Error en delete_all_chats: {e}")
+        raise HTTPException(status_code=500, detail=f"Error eliminando todos los chats: {str(e)}")
+
+
 @router.patch("/chats/{chat_id}/title")
 async def update_chat_title(chat_id: str, request: UpdateTitleRequest) -> JSONResponse:
     """

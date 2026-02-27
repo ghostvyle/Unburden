@@ -235,13 +235,17 @@ async def ifconfig() -> str:
 
 
 @mcp.tool()
-async def arp(interface: Optional[str] = None, scan_local: bool = False) -> str:
+async def arp(interface: Optional[str] = None, scan_local: bool = True) -> str:
     """
-    Descubre equipos alcanzables usando ARP
+    Descubre equipos alcanzables usando ARP.
+
+    Por defecto realiza un escaneo activo completo de la red local (arp-scan --localnet).
+    Si arp-scan no está disponible o falla, cae en la tabla ARP pasiva (arp -a).
 
     Args:
-        interface: Interfaz específica a usar (opcional)
-        scan_local: Si True, hace escaneo activo completo de la red (requiere arp-scan con sudo)
+        interface: Interfaz específica a usar, ej: "wlan0", "eth0" (opcional)
+        scan_local: Si True (por defecto), hace escaneo activo completo con arp-scan.
+                    Si False, solo muestra la tabla ARP actual del sistema (arp -a).
 
     Returns:
         Lista de dispositivos descubiertos en formato JSON

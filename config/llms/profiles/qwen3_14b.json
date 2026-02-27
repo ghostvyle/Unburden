@@ -1,0 +1,10 @@
+{
+    "id": "qwen3_14b",
+    "name": "Qwen3 14B",
+    "model": "qwen3:14b",
+    "description": "Principal de Unburden (~9 GB). Razonamiento avanzado.",
+    "size_gb": 9.0,
+    "thinking": true,
+    "temperature": 0.1,
+    "num_predict": 32768
+}

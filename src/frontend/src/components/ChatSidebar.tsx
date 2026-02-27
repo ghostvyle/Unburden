@@ -14,6 +14,7 @@ interface ChatSidebarProps {
   onDeleteChat: (chatId: string) => void;
   onRenameChat: (chatId: string, newTitle: string) => void;
   onUpdateTarget: (chatId: string, newTarget: string) => void;
+  onDeleteAllChats?: () => void;
   chats: Chat[];
   targets: string[];
   apiBaseUrl: string;
@@ -27,8 +28,10 @@ const ChatSidebar = ({
   onDeleteChat,
   onRenameChat,
   onUpdateTarget,
+  onDeleteAllChats,
   chats,
   targets,
+  apiBaseUrl,
   disabled = false,
 }: ChatSidebarProps) => {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
@@ -168,17 +171,28 @@ const ChatSidebar = ({
     <div className="flex flex-col h-full bg-gray-900 border-r border-green-500/30">
       {/* Header */}
       <div className="p-4 border-b border-green-500/30">
-        <button
-          onClick={handleCreateNewChat}
-          disabled={disabled}
-          className={`w-full font-mono px-4 py-2 rounded transition-colors ${
-            disabled
+        <div className="flex gap-2">
+          <button
+            onClick={handleCreateNewChat}
+            disabled={disabled}
+            className={`flex-1 font-mono px-4 py-2 rounded transition-colors ${disabled
               ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-50"
               : "bg-green-600 hover:bg-green-700 text-white"
-          }`}
-        >
-          [NEW CHAT]
-        </button>
+              }`}
+          >
+            [NEW CHAT]
+          </button>
+          {onDeleteAllChats && chats.length > 0 && (
+            <button
+              onClick={onDeleteAllChats}
+              disabled={disabled}
+              title="Eliminar TODOS los chats e informes"
+              className="px-3 py-2 rounded font-mono text-sm transition-colors border border-red-600/50 bg-red-600/10 text-red-500 hover:bg-red-600/25 hover:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              [✕ ALL]
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Búsqueda */}
@@ -230,17 +244,15 @@ const ChatSidebar = ({
             {filteredChats.map((chat) => (
               <div
                 key={chat.id}
-                className={`relative group rounded p-3 transition-colors ${
-                  disabled
-                    ? "opacity-50 cursor-not-allowed"
-                    : "cursor-pointer"
-                } ${
-                  currentChatId === chat.id
+                className={`relative group rounded p-3 transition-colors ${disabled
+                  ? "opacity-50 cursor-not-allowed"
+                  : "cursor-pointer"
+                  } ${currentChatId === chat.id
                     ? "bg-green-600/20 border border-green-500/50"
                     : disabled
                       ? "border border-transparent"
                       : "hover:bg-gray-800 border border-transparent"
-                }`}
+                  }`}
                 onClick={() => !disabled && onSelectChat(chat.id)}
                 onContextMenu={(e) => !disabled && handleContextMenu(e, chat.id)}
               >

@@ -1,0 +1,10 @@
+{
+    "id": "qwen3_1_7b",
+    "name": "Qwen3 1.7B",
+    "model": "qwen3:1.7b",
+    "description": "Ligero con thinking (~1.1 GB). Para hardware limitado.",
+    "size_gb": 1.1,
+    "thinking": true,
+    "temperature": 0.1,
+    "num_predict": 16384
+}

@@ -1,0 +1,10 @@
+{
+    "id": "qwen3_8b",
+    "name": "Qwen3 8B",
+    "model": "qwen3:8b",
+    "description": "Mediano con thinking (~5 GB). Equilibrio calidad/velocidad.",
+    "size_gb": 5.0,
+    "thinking": true,
+    "temperature": 0.1,
+    "num_predict": 32768
+}

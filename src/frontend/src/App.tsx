@@ -5,6 +5,7 @@ import MarkdownRenderer from "./components/MarkdownRenderer";
 import MarkdownEditor from "./components/MarkdownEditor";
 import ShellConfigModal from "./components/ShellConfigModal";
 import ChatSidebar from "./components/ChatSidebar";
+import ModelSelector from "./components/ModelSelector";
 
 interface Message {
   role: string;
@@ -17,15 +18,15 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  
+
   // Obtener puerto desde variable de entorno, con fallback a 7777
   const port = import.meta.env.VITE_API_PORT || '7777';
-  
+
   // Si estamos en desarrollo local, usar localhost
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return `http://localhost:${port}`;
   }
-  
+
   // Para acceso remoto, usar la misma IP/host pero con el puerto configurado
   return `http://${window.location.hostname}:${port}`;
 };
@@ -45,12 +46,12 @@ const generateDateBasedSessionId = async (): Promise<string> => {
   }
   // Fallback: generar ID local basado en fecha si falla la API
   const now = new Date();
-  return now.getFullYear() + '-' + 
-         String(now.getMonth() + 1).padStart(2, '0') + '-' +
-         String(now.getDate()).padStart(2, '0') + '-' +
-         String(now.getHours()).padStart(2, '0') + '-' +
-         String(now.getMinutes()).padStart(2, '0') + '-' +
-         String(now.getSeconds()).padStart(2, '0');
+  return now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0') + '-' +
+    String(now.getHours()).padStart(2, '0') + '-' +
+    String(now.getMinutes()).padStart(2, '0') + '-' +
+    String(now.getSeconds()).padStart(2, '0');
 };
 
 const App = () => {
@@ -89,7 +90,7 @@ const App = () => {
   } = useChatManager(API_BASE_URL);
 
   // Custom hooks para manejar estado del informe
-  
+
   const addStatusMessage = useCallback((message: string) => {
     setMessages((prev) => [...prev, {
       role: "system",
@@ -145,6 +146,24 @@ const App = () => {
   const handleRenameChat = useCallback(async (chatId: string, newTitle: string) => {
     await renameChat(chatId, newTitle);
   }, [renameChat]);
+
+  // Eliminar TODOS los chats e informes
+  const handleDeleteAllChats = useCallback(async () => {
+    if (!window.confirm('⚠️ ¿Eliminar TODOS los chats e informes? Esta acción no se puede deshacer.')) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/chats`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const data = await res.json();
+      setMessages([]);
+      setCurrentChatId(null);
+      addStatusMessage(`🗑️ ${data.message}`);
+      // No llamar handleNewChat() aquí — el useEffect de initializeApp
+      // se encarga de crear un chat nuevo cuando chats.length === 0
+      await loadChats();
+    } catch (err) {
+      addStatusMessage(`❌ Error eliminando chats: ${err instanceof Error ? err.message : 'Error desconocido'}`);
+    }
+  }, [addStatusMessage, loadChats]);
 
   // MCP Server Management Functions
   const loadMcpServers = useCallback(async () => {
@@ -224,7 +243,7 @@ const App = () => {
     generateReport,
     updateReport,
     generateNewReport,
-    
+
     // Histórico del chat
     historyContent,
     setHistoryContent,
@@ -232,7 +251,7 @@ const App = () => {
     saveEditedHistory,
     uploadHistory,
     downloadHistory,
-    
+
     // General
     clearPentest,
     isProcessing
@@ -735,7 +754,7 @@ const App = () => {
     try {
       // Validar JSON
       JSON.parse(mcpJsonInput);
-      
+
       const response = await fetch(`${API_BASE_URL}/importar-mcps`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -783,7 +802,7 @@ Puede descargar los archivos generados durante esta sesión:
 - **Histórico**: Registro completo de la conversación
 
 *Los botones de descarga permanecen disponibles en la interfaz.*`;
-      
+
       addStatusMessage(finalMessage);
     } else {
       // Activando modo pentesting
@@ -808,6 +827,7 @@ Puede descargar los archivos generados durante esta sesión:
             onDeleteChat={handleDeleteChat}
             onRenameChat={handleRenameChat}
             onUpdateTarget={updateTarget}
+            onDeleteAllChats={handleDeleteAllChats}
             chats={chats}
             targets={targets}
             apiBaseUrl={API_BASE_URL}
@@ -819,247 +839,253 @@ Puede descargar los archivos generados durante esta sesión:
       {/* Contenido principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="border-b border-green-400/40 bg-black/95 backdrop-blur-sm shadow-2xl shadow-green-500/10 flex-shrink-0">
-        <div className="w-full px-2 sm:px-3 lg:px-4 py-2">
-          {/* Top row - Title and sidebar toggle */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {/* Botón toggle sidebar */}
-              <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="hidden md:block px-2 py-1 border border-green-400/70 bg-green-400/10 text-green-400 hover:bg-green-400/20 font-mono text-xs transition-all"
-                title={showSidebar ? "Ocultar chats" : "Mostrar chats"}
-              >
-                [{showSidebar ? "◀" : "▶"}]
-              </button>
-
+          <div className="w-full px-2 sm:px-3 lg:px-4 py-2">
+            {/* Top row - Title and sidebar toggle */}
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <h1 className="text-sm sm:text-base lg:text-lg font-mono font-bold text-green-400 whitespace-nowrap">
-                  [Unburden@pentestingAssistant:~]$
-                </h1>
-              </div>
-              <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500 font-mono">
-                <span>[v1.0.0]</span>
-                <span className="text-green-400">|</span>
-                <span>[ACTIVE]</span>
+                {/* Botón toggle sidebar */}
+                <button
+                  onClick={() => setShowSidebar(!showSidebar)}
+                  className="hidden md:block px-2 py-1 border border-green-400/70 bg-green-400/10 text-green-400 hover:bg-green-400/20 font-mono text-xs transition-all"
+                  title={showSidebar ? "Ocultar chats" : "Mostrar chats"}
+                >
+                  [{showSidebar ? "◀" : "▶"}]
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <h1 className="text-sm sm:text-base lg:text-lg font-mono font-bold text-green-400 whitespace-nowrap">
+                    [Unburden@pentestingAssistant:~]$
+                  </h1>
+                </div>
+                <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500 font-mono">
+                  <span>[v1.0.0]</span>
+                  <span className="text-green-400">|</span>
+                  <span>[ACTIVE]</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Control buttons - Responsive con flex wrap */}
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-mono">
-            {/* Pentest Mode */}
-            <div className="flex items-center gap-2 border border-gray-600/50 bg-gray-900/30 rounded-md px-3 py-2 min-w-fit shadow-lg shadow-gray-900/50">
-              <span className="text-xs sm:text-sm text-green-400 whitespace-nowrap font-semibold">PENTEST:</span>
-              <button
-                className={`px-3 py-2 border font-mono text-xs sm:text-sm font-bold transition-all touch-manipulation rounded-md min-w-[50px] ${
-                  pentestingMode
+            {/* Control buttons - Responsive con flex wrap */}
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 font-mono">
+              {/* Pentest Mode */}
+              <div className="flex items-center gap-2 border border-gray-600/50 bg-gray-900/30 rounded-md px-3 py-2 min-w-fit shadow-lg shadow-gray-900/50">
+                <span className="text-xs sm:text-sm text-green-400 whitespace-nowrap font-semibold">PENTEST:</span>
+                <button
+                  className={`px-3 py-2 border font-mono text-xs sm:text-sm font-bold transition-all touch-manipulation rounded-md min-w-[50px] ${pentestingMode
                     ? "border-red-400/70 bg-red-400/20 text-red-400 animate-pulse shadow-md shadow-red-500/20"
                     : "border-gray-600 bg-gray-900/50 text-gray-400 hover:border-green-400/70 hover:text-green-400 hover:bg-green-400/10"
-                }`}
-                onClick={handleTogglePentestingMode}
+                    }`}
+                  onClick={handleTogglePentestingMode}
+                  disabled={isHeaderDisabled}
+                >
+                  [{pentestingMode ? "ON" : "OFF"}]
+                </button>
+              </div>
+
+              {/* MCP+ */}
+              <button
+                className="px-4 py-2 border-2 border-purple-400/70 bg-purple-400/15 text-purple-400 hover:border-purple-400 hover:bg-purple-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md min-w-fit shadow-lg shadow-purple-900/30 hover:shadow-purple-500/30"
+                onClick={() => {
+                  setMcpModalMode('import');
+                  setShowMcpModal(true);
+                }}
                 disabled={isHeaderDisabled}
+                title="Import custom MCP servers"
               >
-                [{pentestingMode ? "ON" : "OFF"}]
+                [MCP+]
               </button>
+
+              {/* MCP≡ */}
+              <button
+                className="px-4 py-2 border-2 border-cyan-400/70 bg-cyan-400/15 text-cyan-400 hover:border-cyan-400 hover:bg-cyan-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md min-w-fit shadow-lg shadow-cyan-900/30 hover:shadow-cyan-500/30"
+                onClick={() => {
+                  setMcpModalMode('manage');
+                  setShowMcpModal(true);
+                  loadMcpServers();
+                }}
+                disabled={isHeaderDisabled}
+                title="Manage MCP servers"
+              >
+                [MCP≡]
+              </button>
+
+              {/* REFRESH CTX */}
+              <button
+                className="px-4 py-2 border-2 border-yellow-400/70 bg-yellow-400/15 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md whitespace-nowrap min-w-fit shadow-lg shadow-yellow-900/30 hover:shadow-yellow-500/30"
+                onClick={refreshContext}
+                disabled={isHeaderDisabled || !currentChatId}
+                title="Refresh context from chat history"
+              >
+                <span className="hidden lg:inline">[REFRESH CTX]</span>
+                <span className="lg:hidden">[↻ CTX]</span>
+              </button>
+
+              {/* CLEAR CTX */}
+              <button
+                className="px-4 py-2 border-2 border-red-400/70 bg-red-400/15 text-red-400 hover:border-red-400 hover:bg-red-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md whitespace-nowrap min-w-fit shadow-lg shadow-red-900/30 hover:shadow-red-500/30"
+                onClick={clearContext}
+                disabled={isHeaderDisabled}
+                title="Clear agent context (reset memory)"
+              >
+                <span className="hidden lg:inline">[CLEAR CTX]</span>
+                <span className="lg:hidden">[✕ CTX]</span>
+              </button>
+
+              {/* LLM Model Selector */}
+              <ModelSelector
+                apiBaseUrl={API_BASE_URL}
+                disabled={isHeaderDisabled}
+                onModelChanged={(model) =>
+                  addStatusMessage(`🤖 Modelo cambiado a: ${model}`)
+                }
+              />
             </div>
 
-            {/* MCP+ */}
-            <button
-              className="px-4 py-2 border-2 border-purple-400/70 bg-purple-400/15 text-purple-400 hover:border-purple-400 hover:bg-purple-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md min-w-fit shadow-lg shadow-purple-900/30 hover:shadow-purple-500/30"
-              onClick={() => {
-                setMcpModalMode('import');
-                setShowMcpModal(true);
-              }}
-              disabled={isHeaderDisabled}
-              title="Import custom MCP servers"
-            >
-              [MCP+]
-            </button>
-
-            {/* MCP≡ */}
-            <button
-              className="px-4 py-2 border-2 border-cyan-400/70 bg-cyan-400/15 text-cyan-400 hover:border-cyan-400 hover:bg-cyan-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md min-w-fit shadow-lg shadow-cyan-900/30 hover:shadow-cyan-500/30"
-              onClick={() => {
-                setMcpModalMode('manage');
-                setShowMcpModal(true);
-                loadMcpServers();
-              }}
-              disabled={isHeaderDisabled}
-              title="Manage MCP servers"
-            >
-              [MCP≡]
-            </button>
-
-            {/* REFRESH CTX */}
-            <button
-              className="px-4 py-2 border-2 border-yellow-400/70 bg-yellow-400/15 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md whitespace-nowrap min-w-fit shadow-lg shadow-yellow-900/30 hover:shadow-yellow-500/30"
-              onClick={refreshContext}
-              disabled={isHeaderDisabled || !currentChatId}
-              title="Refresh context from chat history"
-            >
-              <span className="hidden lg:inline">[REFRESH CTX]</span>
-              <span className="lg:hidden">[↻ CTX]</span>
-            </button>
-
-            {/* CLEAR CTX */}
-            <button
-              className="px-4 py-2 border-2 border-red-400/70 bg-red-400/15 text-red-400 hover:border-red-400 hover:bg-red-400/25 font-mono text-xs sm:text-sm font-bold transition-all disabled:opacity-50 touch-manipulation rounded-md whitespace-nowrap min-w-fit shadow-lg shadow-red-900/30 hover:shadow-red-500/30"
-              onClick={clearContext}
-              disabled={isHeaderDisabled}
-              title="Clear agent context (reset memory)"
-            >
-              <span className="hidden lg:inline">[CLEAR CTX]</span>
-              <span className="lg:hidden">[✕ CTX]</span>
-            </button>
-          </div>
-
-          {/* Tools row - Mobile Optimized */}
-          {pentestingMode && showReportButtons && (
-            <div className="space-y-3 mt-3">
-              {/* Mobile: Show all buttons in stacked groups */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Report Generation Group */}
-                <div className="border border-green-400/30 bg-green-400/5 p-3 rounded">
-                  <div className="text-green-400 text-xs font-mono mb-2 text-center sm:text-left">REPORT:</div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={generateReport}
-                      className="px-3 py-2 border border-green-400/50 bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
-                      disabled={isHeaderDisabled}
-                      title="Generate report"
-                    >
-                      [GEN]
-                    </button>
-                    <button
-                      onClick={updateReport}
-                      className="px-3 py-2 border border-blue-400/50 bg-blue-400/10 text-blue-400 hover:bg-blue-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
-                      disabled={isHeaderDisabled}
-                      title="Update report"
-                    >
-                      [UPD]
-                    </button>
-                  </div>
-                </div>
-
-                {/* File Operations Group */}
-                <div className="border border-cyan-400/30 bg-cyan-400/5 p-3 rounded">
-                  <div className="text-cyan-400 text-xs font-mono mb-2 text-center sm:text-left">FILES:</div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={downloadReport}
-                      className="px-3 py-2 border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
-                      disabled={isHeaderDisabled}
-                      title="Download report"
-                    >
-                      [RPT↓]
-                    </button>
-                    <button
-                      onClick={handleHistoryDownload}
-                      className="px-3 py-2 border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
-                      disabled={isHeaderDisabled}
-                      title="Download history"
-                    >
-                      [LOG↓]
-                    </button>
-                  </div>
-                </div>
-
-                {/* Edit & Tools Group */}
-                <div className="border border-purple-400/30 bg-purple-400/5 p-3 rounded">
-                  <div className="text-purple-400 text-xs font-mono mb-2 text-center sm:text-left">EDIT & TOOLS:</div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
+            {/* Tools row - Mobile Optimized */}
+            {pentestingMode && showReportButtons && (
+              <div className="space-y-3 mt-3">
+                {/* Mobile: Show all buttons in stacked groups */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Report Generation Group */}
+                  <div className="border border-green-400/30 bg-green-400/5 p-3 rounded">
+                    <div className="text-green-400 text-xs font-mono mb-2 text-center sm:text-left">REPORT:</div>
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
-                        onClick={toggleReportEdit}
-                        className={`flex-1 px-3 py-2 border transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation ${
-                          editMode === 'report'
-                            ? "border-red-400/50 bg-red-400/10 text-red-400 animate-pulse"
-                            : "border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20"
-                        }`}
-                        disabled={loading || isProcessing}
-                        title={editMode === 'report' ? "Cancel edit" : "Edit report"}
+                        onClick={generateReport}
+                        className="px-3 py-2 border border-green-400/50 bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                        disabled={isHeaderDisabled}
+                        title="Generate report"
                       >
-                        {editMode === 'report' ? "[CANCEL]" : "[RPT]"}
+                        [GEN]
                       </button>
                       <button
-                        onClick={toggleHistoryEdit}
-                        className={`flex-1 px-3 py-2 border transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation ${
-                          editMode === 'history'
-                            ? "border-red-400/50 bg-red-400/10 text-red-400 animate-pulse"
-                            : "border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20"
-                        }`}
-                        disabled={loading || isProcessing}
-                        title={editMode === 'history' ? "Cancel edit" : "Edit history"}
+                        onClick={updateReport}
+                        className="px-3 py-2 border border-blue-400/50 bg-blue-400/10 text-blue-400 hover:bg-blue-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                        disabled={isHeaderDisabled}
+                        title="Update report"
                       >
-                        {editMode === 'history' ? "[CANCEL]" : "[LOG]"}
+                        [UPD]
                       </button>
                     </div>
-                    <div className="flex gap-2">
+                  </div>
+
+                  {/* File Operations Group */}
+                  <div className="border border-cyan-400/30 bg-cyan-400/5 p-3 rounded">
+                    <div className="text-cyan-400 text-xs font-mono mb-2 text-center sm:text-left">FILES:</div>
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
-                        onClick={() => reportFileInputRef.current?.click()}
-                        className="flex-1 px-3 py-2 border border-gray-500/50 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                        onClick={downloadReport}
+                        className="px-3 py-2 border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
                         disabled={isHeaderDisabled}
-                        title="Upload report"
+                        title="Download report"
                       >
-                        [↑RPT]
+                        [RPT↓]
                       </button>
                       <button
-                        onClick={() => historyFileInputRef.current?.click()}
-                        className="flex-1 px-3 py-2 border border-gray-500/50 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                        onClick={handleHistoryDownload}
+                        className="px-3 py-2 border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
                         disabled={isHeaderDisabled}
-                        title="Upload history"
+                        title="Download history"
                       >
-                        [↑LOG]
+                        [LOG↓]
                       </button>
-                      <button
-                        onClick={clearPentest}
-                        className="flex-1 px-3 py-2 border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
-                        disabled={isHeaderDisabled}
-                        title="Clear all data"
-                      >
-                        [WIPE]
-                      </button>
+                    </div>
+                  </div>
+
+                  {/* Edit & Tools Group */}
+                  <div className="border border-purple-400/30 bg-purple-400/5 p-3 rounded">
+                    <div className="text-purple-400 text-xs font-mono mb-2 text-center sm:text-left">EDIT & TOOLS:</div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={toggleReportEdit}
+                          className={`flex-1 px-3 py-2 border transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation ${editMode === 'report'
+                            ? "border-red-400/50 bg-red-400/10 text-red-400 animate-pulse"
+                            : "border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20"
+                            }`}
+                          disabled={loading || isProcessing}
+                          title={editMode === 'report' ? "Cancel edit" : "Edit report"}
+                        >
+                          {editMode === 'report' ? "[CANCEL]" : "[RPT]"}
+                        </button>
+                        <button
+                          onClick={toggleHistoryEdit}
+                          className={`flex-1 px-3 py-2 border transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation ${editMode === 'history'
+                            ? "border-red-400/50 bg-red-400/10 text-red-400 animate-pulse"
+                            : "border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20"
+                            }`}
+                          disabled={loading || isProcessing}
+                          title={editMode === 'history' ? "Cancel edit" : "Edit history"}
+                        >
+                          {editMode === 'history' ? "[CANCEL]" : "[LOG]"}
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => reportFileInputRef.current?.click()}
+                          className="flex-1 px-3 py-2 border border-gray-500/50 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                          disabled={isHeaderDisabled}
+                          title="Upload report"
+                        >
+                          [↑RPT]
+                        </button>
+                        <button
+                          onClick={() => historyFileInputRef.current?.click()}
+                          className="flex-1 px-3 py-2 border border-gray-500/50 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                          disabled={isHeaderDisabled}
+                          title="Upload history"
+                        >
+                          [↑LOG]
+                        </button>
+                        <button
+                          onClick={clearPentest}
+                          className="flex-1 px-3 py-2 border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors disabled:opacity-50 font-mono text-sm min-h-[36px] touch-manipulation"
+                          disabled={isHeaderDisabled}
+                          title="Clear all data"
+                        >
+                          [WIPE]
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Inputs ocultos para archivos */}
-        <input
-          ref={reportFileInputRef}
-          type="file"
-          accept=".md"
-          className="hidden"
-          onChange={handleReportUpload}
-        />
-        <input
-          ref={historyFileInputRef}
-          type="file"
-          accept=".md"
-          className="hidden"
-          onChange={handleHistoryUpload}
-        />
-      </header>
-
-      <main className="flex-1 overflow-y-auto px-2 py-1 sm:p-3 bg-black/95 relative min-h-0">
-        {/* Matrix-like background effect */}
-        <div className="absolute inset-0 opacity-5 pointer-events-none">
-          <div className="absolute top-0 left-0 w-full h-full bg-green-400/5" 
-               style={{
-                 backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(34, 197, 94, 0.1) 2px, rgba(34, 197, 94, 0.1) 4px)',
-                 backgroundSize: '20px 20px'
-               }}>
+            )}
           </div>
-        </div>
-        {editMode === 'report' ? (
-          <MarkdownEditor
-            value={reportContent}
-            onChange={setReportContent}
-            placeholder="# [CLASSIFIED] CYBER SECURITY PENTESTING REPORT
+
+          {/* Inputs ocultos para archivos */}
+          <input
+            ref={reportFileInputRef}
+            type="file"
+            accept=".md"
+            className="hidden"
+            onChange={handleReportUpload}
+          />
+          <input
+            ref={historyFileInputRef}
+            type="file"
+            accept=".md"
+            className="hidden"
+            onChange={handleHistoryUpload}
+          />
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-2 py-1 sm:p-3 bg-black/95 relative min-h-0">
+          {/* Matrix-like background effect */}
+          <div className="absolute inset-0 opacity-5 pointer-events-none">
+            <div className="absolute top-0 left-0 w-full h-full bg-green-400/5"
+              style={{
+                backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(34, 197, 94, 0.1) 2px, rgba(34, 197, 94, 0.1) 4px)',
+                backgroundSize: '20px 20px'
+              }}>
+            </div>
+          </div>
+          {editMode === 'report' ? (
+            <MarkdownEditor
+              value={reportContent}
+              onChange={setReportContent}
+              placeholder="# [CLASSIFIED] CYBER SECURITY PENTESTING REPORT
 # Generated by Unburden v1.0
 # ========================================
 
@@ -1083,18 +1109,18 @@ Puede descargar los archivos generados durante esta sesión:
 [Technical details...]
 
 # END OF REPORT"
-            disabled={isDisabled}
-            title="[EDITOR:REPORT]$ nano pentesting_report.md"
-            fileType="report"
-            onSave={handleSaveEditedReport}
-            onCancel={() => setEditMode('none')}
-            isProcessing={isProcessing}
-          />
-        ) : editMode === 'history' ? (
-          <MarkdownEditor
-            value={historyContent}
-            onChange={setHistoryContent}
-            placeholder="# SESSION LOG - Unburden Cyber Terminal
+              disabled={isDisabled}
+              title="[EDITOR:REPORT]$ nano pentesting_report.md"
+              fileType="report"
+              onSave={handleSaveEditedReport}
+              onCancel={() => setEditMode('none')}
+              isProcessing={isProcessing}
+            />
+          ) : editMode === 'history' ? (
+            <MarkdownEditor
+              value={historyContent}
+              onChange={setHistoryContent}
+              placeholder="# SESSION LOG - Unburden Cyber Terminal
 # =====================================
 # Timestamp: $(date)
 # User: user@terminal
@@ -1110,138 +1136,135 @@ Puede descargar los archivos generados durante esta sesión:
 [2024-XX-XX XX:XX:XX] Unburden@pentestingAssistant: detailed analysis...
 
 # END OF SESSION LOG"
-            disabled={isDisabled}
-            title="[EDITOR:LOG]$ tail -f session.log"
-            fileType="history"
-            onSave={handleSaveEditedHistory}
-            onCancel={() => setEditMode('none')}
-            isProcessing={isProcessing}
-          />
-        ) : (
-          <div className="w-full max-w-none px-3 sm:px-4 space-y-2 sm:space-y-3">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`font-mono text-sm border-l-4 pl-3 sm:pl-4 py-2 sm:py-3 rounded-r ${
-                  msg.role === "user" 
-                    ? "border-l-cyan-400 bg-cyan-400/5" 
+              disabled={isDisabled}
+              title="[EDITOR:LOG]$ tail -f session.log"
+              fileType="history"
+              onSave={handleSaveEditedHistory}
+              onCancel={() => setEditMode('none')}
+              isProcessing={isProcessing}
+            />
+          ) : (
+            <div className="w-full max-w-none px-3 sm:px-4 space-y-2 sm:space-y-3">
+              {messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`font-mono text-sm border-l-4 pl-3 sm:pl-4 py-2 sm:py-3 rounded-r ${msg.role === "user"
+                    ? "border-l-cyan-400 bg-cyan-400/5"
                     : msg.role === "system"
-                    ? "border-l-yellow-400 bg-yellow-400/5"
-                    : "border-l-green-400 bg-green-400/5"
-                }`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
-                  <div className="flex items-center space-x-2 flex-wrap">
-                    <span className={`text-xs sm:text-sm font-bold ${
-                      msg.role === "user" 
-                        ? "text-cyan-400" 
-                        : msg.role === "system"
-                        ? "text-yellow-400"
-                        : "text-green-400"
-                    }`}>
-                      [{msg.role === "user" ? "user@terminal" : "Unburden@pentestingAssistant"}]$
-                    </span>
-                    {msg.timestamp && (
-                      <span className="text-xs text-gray-500 hidden sm:inline">
-                        [{msg.timestamp.toLocaleTimeString()}]
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className={`text-sm sm:text-base leading-relaxed ${
-                  msg.role === "user" 
-                    ? "text-cyan-200" 
-                    : msg.role === "system"
-                    ? "text-yellow-200"
-                    : "text-green-200"
-                }`}>
-                  <MarkdownRenderer 
-                    content={msg.content}
-                    className="break-words"
-                  />
-                </div>
-                {index < messages.length - 1 && (
-                  <div className="mt-3 text-gray-600 text-xs">
-                    {Array.from({length: Math.min(40, Math.floor(window.innerWidth / 10))}).map((_, i) => (
-                      <span key={i}>-</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            {loading && (
-              <div className="font-mono text-sm border-l-4 border-l-orange-400 bg-orange-400/5 pl-3 sm:pl-4 py-2 sm:py-3 rounded-r">
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className="text-orange-400 text-xs sm:text-sm font-bold">
-                    [Unburden@pentestingAssistant]$
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-orange-400 text-xs sm:text-sm animate-pulse">PROCESSING</span>
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-orange-200 text-sm leading-relaxed">
-                  Analyzing query... Please wait
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* MCP Import Modal */}
-      {showMcpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
-          <div className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto border border-purple-400/30 bg-black/95 backdrop-blur-sm rounded-lg">
-            {/* Modal Header */}
-            <div className="border-b border-purple-400/30 bg-purple-400/5 p-3 sm:p-4 font-mono sticky top-0 z-10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <span className="text-purple-400 text-xs sm:text-sm font-bold truncate">
-                    {mcpModalMode === 'import' 
-                      ? '[MCP:IMPORT]$ configure custom_servers.json'
-                      : '[MCP:MANAGE]$ server_control_panel.sh'
-                    }
-                  </span>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowMcpModal(false);
-                    setMcpJsonInput('');
-                  }}
-                  className="text-gray-400 hover:text-gray-300 transition-colors px-2 py-1 border border-gray-500/50 min-w-[40px] touch-manipulation"
-                  title="Close"
+                      ? "border-l-yellow-400 bg-yellow-400/5"
+                      : "border-l-green-400 bg-green-400/5"
+                    }`}
                 >
-                  [X]
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-3 sm:p-4 space-y-4 max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-80px)] overflow-y-auto">
-              {mcpModalMode === 'import' ? (
-                <>
-                  {/* Import Mode Content */}
-                  {/* Instructions */}
-                  <div className="bg-gray-900/50 border border-gray-700/50 p-3 font-mono text-xs sm:text-sm">
-                    <div className="text-purple-300 mb-2">IMPORT CUSTOM MCP SERVERS:</div>
-                    <div className="text-gray-400 space-y-1">
-                      <div>• Paste your MCP configuration JSON below</div>
-                      <div>• Or upload a .json file with your MCP servers</div>
-                      <div>• Servers will be merged with existing system MCPs</div>
-                      <div>• Use unique server names to avoid conflicts</div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <span className={`text-xs sm:text-sm font-bold ${msg.role === "user"
+                        ? "text-cyan-400"
+                        : msg.role === "system"
+                          ? "text-yellow-400"
+                          : "text-green-400"
+                        }`}>
+                        [{msg.role === "user" ? "user@terminal" : "Unburden@pentestingAssistant"}]$
+                      </span>
+                      {msg.timestamp && (
+                        <span className="text-xs text-gray-500 hidden sm:inline">
+                          [{msg.timestamp.toLocaleTimeString()}]
+                        </span>
+                      )}
                     </div>
                   </div>
+                  <div className={`text-sm sm:text-base leading-relaxed ${msg.role === "user"
+                    ? "text-cyan-200"
+                    : msg.role === "system"
+                      ? "text-yellow-200"
+                      : "text-green-200"
+                    }`}>
+                    <MarkdownRenderer
+                      content={msg.content}
+                      className="break-words"
+                    />
+                  </div>
+                  {index < messages.length - 1 && (
+                    <div className="mt-3 text-gray-600 text-xs">
+                      {Array.from({ length: Math.min(40, Math.floor(window.innerWidth / 10)) }).map((_, i) => (
+                        <span key={i}>-</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {loading && (
+                <div className="font-mono text-sm border-l-4 border-l-orange-400 bg-orange-400/5 pl-3 sm:pl-4 py-2 sm:py-3 rounded-r">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-orange-400 text-xs sm:text-sm font-bold">
+                      [Unburden@pentestingAssistant]$
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-orange-400 text-xs sm:text-sm animate-pulse">PROCESSING</span>
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-orange-200 text-sm leading-relaxed">
+                    Analyzing query... Please wait
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
 
-              {/* Example format */}
-              <div className="bg-gray-900/80 border border-gray-600 p-3">
-                <div className="text-xs text-gray-400 font-mono mb-2">EXAMPLE FORMAT:</div>
-                <div className="text-green-300 font-mono text-xs leading-relaxed">
-                  {`{
+        {/* MCP Import Modal */}
+        {showMcpModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4">
+            <div className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto border border-purple-400/30 bg-black/95 backdrop-blur-sm rounded-lg">
+              {/* Modal Header */}
+              <div className="border-b border-purple-400/30 bg-purple-400/5 p-3 sm:p-4 font-mono sticky top-0 z-10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                    <span className="text-purple-400 text-xs sm:text-sm font-bold truncate">
+                      {mcpModalMode === 'import'
+                        ? '[MCP:IMPORT]$ configure custom_servers.json'
+                        : '[MCP:MANAGE]$ server_control_panel.sh'
+                      }
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowMcpModal(false);
+                      setMcpJsonInput('');
+                    }}
+                    className="text-gray-400 hover:text-gray-300 transition-colors px-2 py-1 border border-gray-500/50 min-w-[40px] touch-manipulation"
+                    title="Close"
+                  >
+                    [X]
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-3 sm:p-4 space-y-4 max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-80px)] overflow-y-auto">
+                {mcpModalMode === 'import' ? (
+                  <>
+                    {/* Import Mode Content */}
+                    {/* Instructions */}
+                    <div className="bg-gray-900/50 border border-gray-700/50 p-3 font-mono text-xs sm:text-sm">
+                      <div className="text-purple-300 mb-2">IMPORT CUSTOM MCP SERVERS:</div>
+                      <div className="text-gray-400 space-y-1">
+                        <div>• Paste your MCP configuration JSON below</div>
+                        <div>• Or upload a .json file with your MCP servers</div>
+                        <div>• Servers will be merged with existing system MCPs</div>
+                        <div>• Use unique server names to avoid conflicts</div>
+                      </div>
+                    </div>
+
+                    {/* Example format */}
+                    <div className="bg-gray-900/80 border border-gray-600 p-3">
+                      <div className="text-xs text-gray-400 font-mono mb-2">EXAMPLE FORMAT:</div>
+                      <div className="text-green-300 font-mono text-xs leading-relaxed">
+                        {`{
   "my_custom_server": {
     "command": "node",
     "args": ["/path/to/server.js"],
@@ -1256,315 +1279,313 @@ Puede descargar los archivos generados durante esta sesión:
     "transport": "stdio"
   }
 }`}
-                </div>
-              </div>
+                      </div>
+                    </div>
 
-                  {/* JSON Input */}
-                  <div>
-                    <div className="bg-gray-900/80 px-3 py-2 border-b border-gray-600">
-                      <span className="text-xs text-gray-400 font-mono">
-                        MCP CONFIGURATION EDITOR | Paste or edit your JSON configuration
+                    {/* JSON Input */}
+                    <div>
+                      <div className="bg-gray-900/80 px-3 py-2 border-b border-gray-600">
+                        <span className="text-xs text-gray-400 font-mono">
+                          MCP CONFIGURATION EDITOR | Paste or edit your JSON configuration
+                        </span>
+                      </div>
+                      <textarea
+                        className="w-full h-48 sm:h-64 bg-black/90 text-purple-300 p-3 font-mono text-xs sm:text-sm resize-none focus:outline-none focus:ring-1 focus:ring-purple-400 transition-all leading-relaxed border border-gray-600 border-t-0"
+                        value={mcpJsonInput}
+                        onChange={(e) => setMcpJsonInput(e.target.value)}
+                        placeholder="Paste your MCP configuration JSON here..."
+                      />
+                    </div>
+
+                    {/* File Upload */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                      <button
+                        onClick={() => mcpFileInputRef.current?.click()}
+                        className="border border-gray-500 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 px-3 py-2 font-mono text-sm min-h-[36px] transition-colors touch-manipulation"
+                      >
+                        [LOAD FILE]
+                      </button>
+                      <span className="text-xs sm:text-sm text-gray-500 font-mono">
+                        Load configuration from .json file
                       </span>
                     </div>
-                    <textarea
-                      className="w-full h-48 sm:h-64 bg-black/90 text-purple-300 p-3 font-mono text-xs sm:text-sm resize-none focus:outline-none focus:ring-1 focus:ring-purple-400 transition-all leading-relaxed border border-gray-600 border-t-0"
-                      value={mcpJsonInput}
-                      onChange={(e) => setMcpJsonInput(e.target.value)}
-                      placeholder="Paste your MCP configuration JSON here..."
-                    />
-                  </div>
 
-                  {/* File Upload */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                    <button
-                      onClick={() => mcpFileInputRef.current?.click()}
-                      className="border border-gray-500 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 px-3 py-2 font-mono text-sm min-h-[36px] transition-colors touch-manipulation"
-                    >
-                      [LOAD FILE]
-                    </button>
-                    <span className="text-xs sm:text-sm text-gray-500 font-mono">
-                      Load configuration from .json file
-                    </span>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-700/50">
-                    <button
-                      onClick={() => {
-                        setShowMcpModal(false);
-                        setMcpJsonInput('');
-                      }}
-                      className="border border-gray-500 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
-                    >
-                      [CANCEL]
-                    </button>
-                    <button
-                      onClick={handleImportMcps}
-                      className="border border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20 px-4 py-3 font-mono text-sm transition-colors disabled:opacity-50 min-h-[44px] touch-manipulation"
-                      disabled={!mcpJsonInput.trim()}
-                    >
-                      [IMPORT MCPs]
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Manage Mode Content */}
-                  <div className="bg-gray-900/50 border border-gray-700/50 p-3 font-mono text-xs sm:text-sm">
-                    <div className="text-cyan-300 mb-2">MCP SERVER CONTROL PANEL:</div>
-                    <div className="text-gray-400 space-y-1">
-                      <div>• System servers are managed by the application</div>
-                      <div>• User servers can be deleted individually or all at once</div>
-                      <div>• Changes take effect immediately</div>
-                    </div>
-                  </div>
-
-                  {/* Server Status Panel */}
-                  {mcpServers && (
-                    <div className="space-y-4">
-                      {/* System Servers */}
-                      {Object.keys(mcpServers.system_servers).length > 0 && (
-                        <div>
-                          <div className="text-green-400 font-mono text-sm mb-3 border-b border-green-400/30 pb-1">
-                            SYSTEM SERVERS ({Object.keys(mcpServers.system_servers).length})
-                          </div>
-                          <div className="space-y-2">
-                            {Object.entries(mcpServers.system_servers).map(([name, server]: [string, any]) => (
-                              <div key={name} className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center space-x-2">
-                                    <button
-                                      onClick={() => toggleServerExpansion(name)}
-                                      className="text-green-400 hover:text-green-300 transition-colors"
-                                      title="Show/hide tools"
-                                    >
-                                      <svg
-                                        className={`w-4 h-4 transition-transform ${expandedServers.has(name) ? 'rotate-90' : ''}`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                      </svg>
-                                    </button>
-                                    <span className="text-green-300 font-bold">{name}</span>
-                                    <span className={`px-2 py-1 text-xs ${
-                                      server.status === 'connected'
-                                        ? 'bg-green-400/10 text-green-400 border border-green-400/30'
-                                        : 'bg-red-400/10 text-red-400 border border-red-400/30'
-                                    }`}>
-                                      {server.status.toUpperCase()}
-                                    </span>
-                                  </div>
-                                  <div className="text-gray-400">
-                                    {server.transport} | {server.tools_count} tools
-                                  </div>
-                                </div>
-
-                                {/* Tool list dropdown */}
-                                {expandedServers.has(name) && server.tool_names && server.tool_names.length > 0 && (
-                                  <div className="mt-2 pl-6 border-l-2 border-green-400/30">
-                                    <div className="text-green-400/80 text-xs mb-1">Available Tools:</div>
-                                    <ul className="space-y-1">
-                                      {server.tool_names.map((toolName: string) => (
-                                        <li key={toolName} className="text-gray-300 text-xs">
-                                          • {toolName}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                {server.last_error && (
-                                  <div className="text-red-300 text-xs mt-1">
-                                    Error: {server.last_error}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* User Servers */}
-                      {Object.keys(mcpServers.user_servers).length > 0 && (
-                        <div>
-                          <div className="text-purple-400 font-mono text-sm mb-3 border-b border-purple-400/30 pb-1">
-                            USER SERVERS ({Object.keys(mcpServers.user_servers).length})
-                          </div>
-                          <div className="space-y-2">
-                            {Object.entries(mcpServers.user_servers).map(([name, server]: [string, any]) => (
-                              <div key={name} className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center space-x-2">
-                                    <button
-                                      onClick={() => toggleServerExpansion(name)}
-                                      className="text-purple-400 hover:text-purple-300 transition-colors"
-                                      title="Show/hide tools"
-                                    >
-                                      <svg
-                                        className={`w-4 h-4 transition-transform ${expandedServers.has(name) ? 'rotate-90' : ''}`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                      </svg>
-                                    </button>
-                                    <span className="text-purple-300 font-bold">{name}</span>
-                                    <span className={`px-2 py-1 text-xs ${
-                                      server.status === 'connected'
-                                        ? 'bg-green-400/10 text-green-400 border border-green-400/30'
-                                        : 'bg-red-400/10 text-red-400 border border-red-400/30'
-                                    }`}>
-                                      {server.status.toUpperCase()}
-                                    </span>
-                                  </div>
-                                  <div className="text-gray-400">
-                                    {server.transport} | {server.tools_count} tools
-                                  </div>
-                                </div>
-
-                                {/* Tool list dropdown */}
-                                {expandedServers.has(name) && server.tool_names && server.tool_names.length > 0 && (
-                                  <div className="mt-2 pl-6 border-l-2 border-purple-400/30">
-                                    <div className="text-purple-400/80 text-xs mb-1">Available Tools:</div>
-                                    <ul className="space-y-1">
-                                      {server.tool_names.map((toolName: string) => (
-                                        <li key={toolName} className="text-gray-300 text-xs">
-                                          • {toolName}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                <div className="flex items-center space-x-2 mt-3">
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm(`Delete MCP server '${name}'? This action cannot be undone.`)) {
-                                        deleteMcpServer(name);
-                                      }
-                                    }}
-                                    className="px-3 py-2 text-sm font-mono border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors min-h-[36px] touch-manipulation"
-                                    disabled={loading}
-                                  >
-                                    [DELETE]
-                                  </button>
-                                </div>
-
-                                {server.last_error && (
-                                  <div className="text-red-300 text-xs mt-2">
-                                    Error: {server.last_error}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* No User Servers */}
-                      {Object.keys(mcpServers.user_servers).length === 0 && (
-                        <div className="bg-gray-900/50 border border-gray-700/50 p-4 text-center">
-                          <div className="text-gray-400 font-mono text-sm">
-                            No user servers configured. Use [MCP+] to import custom servers.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Summary */}
-                      <div className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
-                        <div className="text-cyan-300 mb-2">SERVER SUMMARY:</div>
-                        <div className="grid grid-cols-2 gap-4 text-gray-400">
-                          <div>Total Servers: {mcpServers.total_servers}</div>
-                          <div>Connected: {mcpServers.connected_count}</div>
-                          <div>Failed: {mcpServers.failed_count}</div>
-                          <div>System: {Object.keys(mcpServers.system_servers).length}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Loading State */}
-                  {!mcpServers && (
-                    <div className="bg-gray-900/50 border border-gray-700/50 p-4 text-center">
-                      <div className="text-gray-400 font-mono text-sm animate-pulse">
-                        Loading server status...
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons for Manage Mode */}
-                  <div className="flex flex-col gap-3 pt-4 border-t border-gray-700/50">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        onClick={loadMcpServers}
-                        className="border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
-                        disabled={loading}
-                      >
-                        [REFRESH]
-                      </button>
-                      
-                      {/* CLEAR ALL button - solo mostrar si hay servidores de usuario */}
-                      {mcpServers && Object.keys(mcpServers.user_servers).length > 0 && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Clear ALL user MCP servers? This will remove ${Object.keys(mcpServers.user_servers).length} server(s). This action cannot be undone.`)) {
-                              clearAllUserMcps();
-                            }
-                          }}
-                          className="border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
-                          disabled={loading}
-                        >
-                          [CLEAR ALL USER]
-                        </button>
-                      )}
-                    </div>
-                    
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        onClick={() => {
-                          setMcpModalMode('import');
-                        }}
-                        className="border border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
-                      >
-                        [IMPORT NEW]
-                      </button>
-                      
+                    {/* Action Buttons */}
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-700/50">
                       <button
                         onClick={() => {
                           setShowMcpModal(false);
+                          setMcpJsonInput('');
                         }}
                         className="border border-gray-500 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
                       >
-                        [CLOSE]
+                        [CANCEL]
+                      </button>
+                      <button
+                        onClick={handleImportMcps}
+                        className="border border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20 px-4 py-3 font-mono text-sm transition-colors disabled:opacity-50 min-h-[44px] touch-manipulation"
+                        disabled={!mcpJsonInput.trim()}
+                      >
+                        [IMPORT MCPs]
                       </button>
                     </div>
-                  </div>
-                </>
-              )}
+                  </>
+                ) : (
+                  <>
+                    {/* Manage Mode Content */}
+                    <div className="bg-gray-900/50 border border-gray-700/50 p-3 font-mono text-xs sm:text-sm">
+                      <div className="text-cyan-300 mb-2">MCP SERVER CONTROL PANEL:</div>
+                      <div className="text-gray-400 space-y-1">
+                        <div>• System servers are managed by the application</div>
+                        <div>• User servers can be deleted individually or all at once</div>
+                        <div>• Changes take effect immediately</div>
+                      </div>
+                    </div>
+
+                    {/* Server Status Panel */}
+                    {mcpServers && (
+                      <div className="space-y-4">
+                        {/* System Servers */}
+                        {Object.keys(mcpServers.system_servers).length > 0 && (
+                          <div>
+                            <div className="text-green-400 font-mono text-sm mb-3 border-b border-green-400/30 pb-1">
+                              SYSTEM SERVERS ({Object.keys(mcpServers.system_servers).length})
+                            </div>
+                            <div className="space-y-2">
+                              {Object.entries(mcpServers.system_servers).map(([name, server]: [string, any]) => (
+                                <div key={name} className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        onClick={() => toggleServerExpansion(name)}
+                                        className="text-green-400 hover:text-green-300 transition-colors"
+                                        title="Show/hide tools"
+                                      >
+                                        <svg
+                                          className={`w-4 h-4 transition-transform ${expandedServers.has(name) ? 'rotate-90' : ''}`}
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </button>
+                                      <span className="text-green-300 font-bold">{name}</span>
+                                      <span className={`px-2 py-1 text-xs ${server.status === 'connected'
+                                        ? 'bg-green-400/10 text-green-400 border border-green-400/30'
+                                        : 'bg-red-400/10 text-red-400 border border-red-400/30'
+                                        }`}>
+                                        {server.status.toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div className="text-gray-400">
+                                      {server.transport} | {server.tools_count} tools
+                                    </div>
+                                  </div>
+
+                                  {/* Tool list dropdown */}
+                                  {expandedServers.has(name) && server.tool_names && server.tool_names.length > 0 && (
+                                    <div className="mt-2 pl-6 border-l-2 border-green-400/30">
+                                      <div className="text-green-400/80 text-xs mb-1">Available Tools:</div>
+                                      <ul className="space-y-1">
+                                        {server.tool_names.map((toolName: string) => (
+                                          <li key={toolName} className="text-gray-300 text-xs">
+                                            • {toolName}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {server.last_error && (
+                                    <div className="text-red-300 text-xs mt-1">
+                                      Error: {server.last_error}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* User Servers */}
+                        {Object.keys(mcpServers.user_servers).length > 0 && (
+                          <div>
+                            <div className="text-purple-400 font-mono text-sm mb-3 border-b border-purple-400/30 pb-1">
+                              USER SERVERS ({Object.keys(mcpServers.user_servers).length})
+                            </div>
+                            <div className="space-y-2">
+                              {Object.entries(mcpServers.user_servers).map(([name, server]: [string, any]) => (
+                                <div key={name} className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        onClick={() => toggleServerExpansion(name)}
+                                        className="text-purple-400 hover:text-purple-300 transition-colors"
+                                        title="Show/hide tools"
+                                      >
+                                        <svg
+                                          className={`w-4 h-4 transition-transform ${expandedServers.has(name) ? 'rotate-90' : ''}`}
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </button>
+                                      <span className="text-purple-300 font-bold">{name}</span>
+                                      <span className={`px-2 py-1 text-xs ${server.status === 'connected'
+                                        ? 'bg-green-400/10 text-green-400 border border-green-400/30'
+                                        : 'bg-red-400/10 text-red-400 border border-red-400/30'
+                                        }`}>
+                                        {server.status.toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div className="text-gray-400">
+                                      {server.transport} | {server.tools_count} tools
+                                    </div>
+                                  </div>
+
+                                  {/* Tool list dropdown */}
+                                  {expandedServers.has(name) && server.tool_names && server.tool_names.length > 0 && (
+                                    <div className="mt-2 pl-6 border-l-2 border-purple-400/30">
+                                      <div className="text-purple-400/80 text-xs mb-1">Available Tools:</div>
+                                      <ul className="space-y-1">
+                                        {server.tool_names.map((toolName: string) => (
+                                          <li key={toolName} className="text-gray-300 text-xs">
+                                            • {toolName}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center space-x-2 mt-3">
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm(`Delete MCP server '${name}'? This action cannot be undone.`)) {
+                                          deleteMcpServer(name);
+                                        }
+                                      }}
+                                      className="px-3 py-2 text-sm font-mono border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors min-h-[36px] touch-manipulation"
+                                      disabled={loading}
+                                    >
+                                      [DELETE]
+                                    </button>
+                                  </div>
+
+                                  {server.last_error && (
+                                    <div className="text-red-300 text-xs mt-2">
+                                      Error: {server.last_error}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No User Servers */}
+                        {Object.keys(mcpServers.user_servers).length === 0 && (
+                          <div className="bg-gray-900/50 border border-gray-700/50 p-4 text-center">
+                            <div className="text-gray-400 font-mono text-sm">
+                              No user servers configured. Use [MCP+] to import custom servers.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Summary */}
+                        <div className="bg-gray-900/80 border border-gray-600 p-3 font-mono text-xs">
+                          <div className="text-cyan-300 mb-2">SERVER SUMMARY:</div>
+                          <div className="grid grid-cols-2 gap-4 text-gray-400">
+                            <div>Total Servers: {mcpServers.total_servers}</div>
+                            <div>Connected: {mcpServers.connected_count}</div>
+                            <div>Failed: {mcpServers.failed_count}</div>
+                            <div>System: {Object.keys(mcpServers.system_servers).length}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Loading State */}
+                    {!mcpServers && (
+                      <div className="bg-gray-900/50 border border-gray-700/50 p-4 text-center">
+                        <div className="text-gray-400 font-mono text-sm animate-pulse">
+                          Loading server status...
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons for Manage Mode */}
+                    <div className="flex flex-col gap-3 pt-4 border-t border-gray-700/50">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={loadMcpServers}
+                          className="border border-cyan-400/50 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
+                          disabled={loading}
+                        >
+                          [REFRESH]
+                        </button>
+
+                        {/* CLEAR ALL button - solo mostrar si hay servidores de usuario */}
+                        {mcpServers && Object.keys(mcpServers.user_servers).length > 0 && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Clear ALL user MCP servers? This will remove ${Object.keys(mcpServers.user_servers).length} server(s). This action cannot be undone.`)) {
+                                clearAllUserMcps();
+                              }
+                            }}
+                            className="border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
+                            disabled={loading}
+                          >
+                            [CLEAR ALL USER]
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={() => {
+                            setMcpModalMode('import');
+                          }}
+                          className="border border-purple-400/50 bg-purple-400/10 text-purple-400 hover:bg-purple-400/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
+                        >
+                          [IMPORT NEW]
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowMcpModal(false);
+                          }}
+                          className="border border-gray-500 bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 px-4 py-3 font-mono text-sm transition-colors min-h-[44px] touch-manipulation"
+                        >
+                          [CLOSE]
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <input
-        ref={mcpFileInputRef}
-        type="file"
-        accept=".json"
-        className="hidden"
-        onChange={handleMcpFileUpload}
-      />
-
-      {/* Shell Config Modal */}
-      {showShellConfigModal && (
-        <ShellConfigModal
-          onConfirm={handleShellConfigConfirm}
-          onCancel={handleShellConfigCancel}
-          apiBaseUrl={API_BASE_URL}
+        <input
+          ref={mcpFileInputRef}
+          type="file"
+          accept=".json"
+          className="hidden"
+          onChange={handleMcpFileUpload}
         />
-      )}
+
+        {/* Shell Config Modal */}
+        {showShellConfigModal && (
+          <ShellConfigModal
+            onConfirm={handleShellConfigConfirm}
+            onCancel={handleShellConfigCancel}
+            apiBaseUrl={API_BASE_URL}
+          />
+        )}
 
         <footer className="border-t border-green-400/40 bg-black/95 backdrop-blur-sm shadow-2xl shadow-green-500/10 flex-shrink-0">
           <div className="w-full p-2">
@@ -1582,8 +1603,8 @@ Puede descargar los archivos generados durante esta sesión:
                           <span className="text-orange-400 animate-pulse">EXEC</span>
                           <div className="flex space-x-1">
                             <div className="w-1 h-1 bg-orange-400 rounded-full animate-bounce"></div>
-                            <div className="w-1 h-1 bg-orange-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                            <div className="w-1 h-1 bg-orange-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                            <div className="w-1 h-1 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-1 h-1 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                           </div>
                         </div>
                       )}
@@ -1612,13 +1633,12 @@ Puede descargar los archivos generados durante esta sesión:
                   <button
                     onClick={() => sendMessage()}
                     disabled={isHeaderDisabled || !input.trim()}
-                    className={`absolute top-1/2 transform -translate-y-1/2 right-2 px-2 py-1 border font-mono text-xs min-h-[30px] transition-all touch-manipulation ${
-                      loading
-                        ? "border-orange-400/70 bg-orange-400/10 text-orange-400 cursor-not-allowed animate-pulse"
-                        : (isHeaderDisabled || !input.trim())
+                    className={`absolute top-1/2 transform -translate-y-1/2 right-2 px-2 py-1 border font-mono text-xs min-h-[30px] transition-all touch-manipulation ${loading
+                      ? "border-orange-400/70 bg-orange-400/10 text-orange-400 cursor-not-allowed animate-pulse"
+                      : (isHeaderDisabled || !input.trim())
                         ? "border-gray-600 bg-gray-900/50 text-gray-500 cursor-not-allowed"
                         : "border-green-400/70 bg-green-400/10 text-green-400 hover:bg-green-400/20 hover:border-green-400"
-                    }`}
+                      }`}
                   >
                     {loading ? "[EXEC]" : "[SEND]"}
                   </button>

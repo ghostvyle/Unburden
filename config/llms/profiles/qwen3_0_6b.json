@@ -1,0 +1,10 @@
+{
+    "id": "qwen3_0_6b",
+    "name": "Qwen3 0.6B",
+    "model": "qwen3:0.6b",
+    "description": "Ultraligero (~0.5 GB). Sin thinking.",
+    "size_gb": 0.5,
+    "thinking": false,
+    "temperature": 0.1,
+    "num_predict": 8192
+}

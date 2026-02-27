@@ -22,6 +22,7 @@ from src.backend.mcp.mcp_client import get_mcp_manager
 from src.backend.routes.chat import router as chat_router
 from src.backend.routes.pentesting import router as pentesting_router
 from src.backend.routes.mcp import router as mcp_router
+from src.backend.routes.llm import router as llm_router
 
 
 # === Lifecycle del servidor ===
@@ -71,6 +72,7 @@ async def health_check():
 app.include_router(chat_router, tags=["Chat"])
 app.include_router(pentesting_router, tags=["Pentesting"])
 app.include_router(mcp_router, tags=["MCP"])
+app.include_router(llm_router)
 
 
 # === Servir frontend ===

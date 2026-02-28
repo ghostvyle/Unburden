@@ -4,10 +4,11 @@ Endpoints de gestión del modelo LLM activo
 import asyncio
 import json
 import logging
-import subprocess
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/llm", tags=["LLM"])
 _CONFIG_DIR = Path("config/llms")
 _ACTIVE_MODEL_FILE = _CONFIG_DIR / "active_model.json"
 _PROFILES_DIR = _CONFIG_DIR / "profiles"
+_OLLAMA_BASE = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -53,46 +55,30 @@ def _get_active_model_info() -> Dict[str, Any]:
         return {"model": "unknown", "profile": "unknown"}
 
 
-def _run_ollama(args: List[str], timeout: int = 10) -> str:
-    """Ejecuta un comando ollama de forma síncrona (solo para comandos rápidos)."""
+async def _get_ollama_available_models() -> List[str]:
+    """Modelos descargados en Ollama (via API HTTP)."""
     try:
-        result = subprocess.run(
-            ["ollama"] + args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        logger.warning(f"ollama {' '.join(args)} timed out after {timeout}s")
-        return ""
-    except FileNotFoundError:
-        logger.error("ollama command not found in PATH")
-        return ""
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{_OLLAMA_BASE}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            return [m["name"] for m in data.get("models", [])]
     except Exception as e:
-        logger.debug(f"ollama {' '.join(args)} failed: {e}")
-        return ""
+        logger.warning(f"Could not list Ollama models: {e}")
+        return []
 
 
-def _parse_ollama_list(output: str) -> List[str]:
-    """Parsea la salida de 'ollama list' → lista de nombres:tag."""
-    models = []
-    lines = output.strip().splitlines()
-    for line in lines[1:]:  # skip header
-        parts = line.split()
-        if parts:
-            models.append(parts[0])
-    return models
-
-
-def _get_ollama_available_models() -> List[str]:
-    """Modelos descargados localmente."""
-    return _parse_ollama_list(_run_ollama(["list"]))
-
-
-def _get_ollama_loaded_models() -> List[str]:
-    """Modelos actualmente en RAM/VRAM."""
-    return _parse_ollama_list(_run_ollama(["ps"]))
+async def _get_ollama_loaded_models() -> List[str]:
+    """Modelos actualmente en RAM/VRAM (via API HTTP)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{_OLLAMA_BASE}/api/ps")
+            resp.raise_for_status()
+            data = resp.json()
+            return [m["name"] for m in data.get("models", [])]
+    except Exception as e:
+        logger.warning(f"Could not list loaded Ollama models: {e}")
+        return []
 
 
 def _is_model_downloaded(model: str, available: List[str]) -> bool:
@@ -104,10 +90,17 @@ def _is_model_downloaded(model: str, available: List[str]) -> bool:
     return False
 
 
-def _stop_ollama_model(model: str) -> None:
-    """Para un modelo en Ollama para liberar memoria."""
-    out = _run_ollama(["stop", model], timeout=10)
-    logger.info(f"ollama stop {model}: {out or 'ok'}")
+async def _stop_ollama_model(model: str) -> None:
+    """Para un modelo en Ollama para liberar memoria (via API HTTP)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{_OLLAMA_BASE}/api/generate",
+                json={"model": model, "keep_alive": 0},
+            )
+            logger.info(f"ollama stop {model}: {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Could not stop model {model}: {e}")
 
 
 def _save_active_model(profile_id: str, model: str) -> None:
@@ -118,29 +111,18 @@ def _save_active_model(profile_id: str, model: str) -> None:
 
 
 async def _async_ollama_pull(model: str, timeout: int = 600) -> tuple[bool, str]:
-    """
-    Descarga un modelo usando asyncio.create_subprocess_exec para no bloquear
-    el event loop de FastAPI durante la descarga.
-    Returns (success, stderr_on_failure)
-    """
+    """Descarga un modelo via API HTTP de Ollama."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "ollama", "pull", model,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            proc.kill()
-            return False, f"Timeout pulling '{model}' after {timeout}s"
-
-        if proc.returncode != 0:
-            err = stderr.decode(errors="replace").strip()
-            return False, err
-        return True, ""
-    except FileNotFoundError:
-        return False, "ollama command not found in PATH"
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
+            resp = await client.post(
+                f"{_OLLAMA_BASE}/api/pull",
+                json={"name": model},
+            )
+            if resp.status_code != 200:
+                return False, f"HTTP {resp.status_code}: {resp.text}"
+            return True, ""
+    except httpx.TimeoutException:
+        return False, f"Timeout pulling '{model}' after {timeout}s"
     except Exception as e:
         return False, str(e)
 
@@ -151,10 +133,8 @@ async def _async_ollama_pull(model: str, timeout: int = 600) -> tuple[bool, str]
 async def get_llm_status() -> JSONResponse:
     """Devuelve el modelo activo actual."""
     active = _get_active_model_info()
-    # Run quick ollama queries in a thread to avoid blocking
-    loop = asyncio.get_event_loop()
-    loaded = await loop.run_in_executor(None, _get_ollama_loaded_models)
-    available = await loop.run_in_executor(None, _get_ollama_available_models)
+    loaded = await _get_ollama_loaded_models()
+    available = await _get_ollama_available_models()
 
     model = active.get("model", "unknown")
     return JSONResponse({
@@ -172,9 +152,8 @@ async def list_models() -> JSONResponse:
     enriquecidos con estado real de Ollama.
     """
     profiles = _load_all_profiles()
-    loop = asyncio.get_event_loop()
-    available = await loop.run_in_executor(None, _get_ollama_available_models)
-    loaded = await loop.run_in_executor(None, _get_ollama_loaded_models)
+    available = await _get_ollama_available_models()
+    loaded = await _get_ollama_loaded_models()
     active_info = _get_active_model_info()
     active_profile = active_info.get("profile", "")
 
@@ -220,8 +199,7 @@ async def switch_model(request: SwitchModelRequest) -> JSONResponse:
     if not target_model:
         raise HTTPException(400, detail="Perfil sin campo 'model'")
 
-    loop = asyncio.get_event_loop()
-    available = await loop.run_in_executor(None, _get_ollama_available_models)
+    available = await _get_ollama_available_models()
     downloaded = _is_model_downloaded(target_model, available)
 
     # 2. Sin confirmación y no descargado → pedir confirmación al usuario
@@ -238,11 +216,11 @@ async def switch_model(request: SwitchModelRequest) -> JSONResponse:
             ),
         }, status_code=202)
 
-    # 3. Parar modelo actual (rápido → executor)
+    # 3. Parar modelo actual
     active_info = _get_active_model_info()
     current_model = active_info.get("model", "")
     if current_model and current_model != target_model:
-        await loop.run_in_executor(None, _stop_ollama_model, current_model)
+        await _stop_ollama_model(current_model)
 
     # 4. Pull asíncrono si hace falta
     if not downloaded:
@@ -279,9 +257,8 @@ async def switch_model(request: SwitchModelRequest) -> JSONResponse:
 @router.get("/ollama/running")
 async def get_running_models() -> JSONResponse:
     """Modelos actualmente cargados en memoria por Ollama."""
-    loop = asyncio.get_event_loop()
-    loaded = await loop.run_in_executor(None, _get_ollama_loaded_models)
-    available = await loop.run_in_executor(None, _get_ollama_available_models)
+    loaded = await _get_ollama_loaded_models()
+    available = await _get_ollama_available_models()
     return JSONResponse({
         "loaded_in_memory": loaded,
         "downloaded": available,

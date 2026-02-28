@@ -102,6 +102,7 @@ Unburden follows a **three-layer architecture**:
 
 ## Prerequisites
 
+### Native
 - **Linux** (tested on Kali Linux / Ubuntu)
 - **Python 3.11+**
 - **Node.js 18+** and npm
@@ -186,10 +187,11 @@ This will:
 
 ```
 Unburden/
-├── Unburden.sh                 # Launch script
+├── Unburden.sh                 # Launch script (native)
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # Project documentation
 ├── assets/                     # Static assets
+├── config/                     # LLM profiles & runtime config
 ├── src/
 │   ├── Unburden.py             # Main entry point
 │   ├── backend/
@@ -213,7 +215,7 @@ Unburden/
 │       ├── nmap/               # Nmap MCP server (8 tools)
 │       ├── osint/              # OSINT MCP server (61 tools)
 │       └── network/            # Network utilities MCP server (3 tools)
-└── docs/                       # Documentation & thesis (coming soon)
+└── docs/                       # Documentation & thesis
 ```
 
 ## MCP Servers

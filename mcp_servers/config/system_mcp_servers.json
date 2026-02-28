@@ -29,12 +29,7 @@
         "--transport",
         "stdio"
       ],
-      "transport": "stdio",
-      "env": {
-        "MSF_PASSWORD": "123456",
-        "MSF_HOST": "127.0.0.1",
-        "MSF_PORT": "55553"
-      }
+      "transport": "stdio"
     },
     "network-tools": {
       "command": "${VENV_PYTHON}",

@@ -204,7 +204,7 @@ def build_mcp_clients_from_config(json_path: str = "mcp_servers.json") -> Tuple[
             # 3) Si transport es stdio explícitamente y hay command, STDIO
             elif transport == "stdio" and cmd:
                 if shutil.which(cmd):
-                    client = BasicMCPClient(cmd, args=args, env=env, timeout=999999)
+                    client = BasicMCPClient(cmd, args=args, env={**os.environ, **env}, timeout=999999)
                     clients.append(client)
                     server_names.append(name)
                     active_mcp_clients[name] = {

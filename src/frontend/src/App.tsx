@@ -19,16 +19,10 @@ const getApiBaseUrl = () => {
     return import.meta.env.VITE_API_BASE_URL;
   }
 
-  // Obtener puerto desde variable de entorno, con fallback a 7777
-  const port = import.meta.env.VITE_API_PORT || '7777';
-
-  // Si estamos en desarrollo local, usar localhost
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return `http://localhost:${port}`;
-  }
-
-  // Para acceso remoto, usar la misma IP/host pero con el puerto configurado
-  return `http://${window.location.hostname}:${port}`;
+  // Usar el mismo origen desde el que se sirve la página.
+  // En Docker/producción: FastAPI sirve frontend y API en el mismo puerto.
+  // En desarrollo: Vite proxy reenvía las peticiones al backend.
+  return window.location.origin;
 };
 
 const API_BASE_URL = getApiBaseUrl();
